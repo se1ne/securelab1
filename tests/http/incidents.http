@@ -26,5 +26,11 @@ GET {{host}}/api/incidents?status=Unknown
 Accept: application/json
 
 ### Lab 1 extension point: expected 200 ОК and a list of each incident severity class and their count
+# Content-Type: application/json; charset=utf-8
+# Тіло: JSON-масив елементів { severity, count }, без інших полів.
+# Політика нульових груп: повний перелік рівнів (відсутній має count: 0).
+# Порядок: Critical, High, Medium, Low.
+# На baseline seed: Critical 0, High 1, Medium 1, Low 1.
 GET {{host}}/api/incidents/severity-summary
 Accept: application/json
+
