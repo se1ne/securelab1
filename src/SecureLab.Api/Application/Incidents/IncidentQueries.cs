@@ -33,7 +33,8 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
 
     public Task<IncidentDetailsResponse?> GetDetailsAsync(Guid id, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Loading incident {IncidentId}", id);
+        var traceId = System.Diagnostics.Activity.Current?.TraceId.ToString() ?? "N/A";
+        logger.LogInformation("Loading incident {IncidentId}, TraceId: {TraceId}", id, traceId);
 
         return dbContext.Incidents
             .AsNoTracking()
@@ -58,4 +59,38 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
                     .ToList()))
             .SingleOrDefaultAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(CancellationToken cancellationToken = default)
+    {
+        var rawSummary = await dbContext.Incidents
+            .AsNoTracking()
+            .GroupBy(i => i.Severity)
+            .Select(g => new {
+                Severity = g.Key,
+                Count = g.Count()
+            })
+            .ToListAsync(cancellationToken);
+
+        var summaryDict = rawSummary.ToDictionary(x => x.Severity, x => x.Count);
+        var orderedSeverities = new[]
+        {
+            IncidentSeverity.Critical,
+            IncidentSeverity.High,
+            IncidentSeverity.Medium,
+            IncidentSeverity.Low
+        };
+        var result = orderedSeverities
+            .Select(severity => 
+            {
+                var severityString = severity.ToString();
+                var count = summaryDict.TryGetValue(severity, out var c) ? c : 0;
+                return new IncidentSeveritySummaryResponse(severityString, count);
+            })
+            .ToList();
+        var traceId = System.Diagnostics.Activity.Current?.TraceId.ToString() ?? "N/A";
+        logger.LogInformation("Created severity summary list. Groups: {GroupCount}, TraceId: {TraceId}", result.Count, traceId);
+
+        return result;
+    }
+
 }
