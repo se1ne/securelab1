@@ -22,7 +22,7 @@
 3. Замінено заглушку `501 Not Implemented` на повноцінний endpoint у `IncidentEndpoints.cs`.
 4. Оновлено фронтенд (`index.html` та `app.js`): додано кнопку, список та елемент статусу `<p id="summary-status" role="status">`.
 5. Додано документацію контракту в `tests/http/incidents.http` та написано інтеграційний тест у `SecureLab.Api.Tests`.
-6. Змінено випадковий шлях з 200 з HTML, на 404 з Problem Details.
+6. Невідомі маршрути під /api/ тепер повертають 404 Problem Details замість 200 з HTML клієнта.
 
 ## 4. Перевірка
 
