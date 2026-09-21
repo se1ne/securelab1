@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using SecureLab.Api.Data;
 using SecureLab.Api.Presentation.Contracts;
+using SecureLab.Api.Application.Incidents;
+using SecureLab.Api.Data.Entities;
 
 namespace SecureLab.Api.Tests;
 
@@ -52,5 +54,31 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
 
         Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal);
         Assert.Contains("textContent", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetSeveritySummary_ReturnsExpectedDataAndCoversAllEnumValues()
+    {
+
+        var response = await _client.GetAsync("/api/incidents/severity-summary");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var summary = await response.Content.ReadFromJsonAsync<IReadOnlyList<IncidentSeveritySummaryResponse>>();
+        Assert.NotNull(summary);
+
+        var expectedOrder = new[] { "Critical", "High", "Medium", "Low" };
+        var actualOrder = summary.Select(x => x.Severity).ToArray();
+        Assert.Equal(expectedOrder, actualOrder);
+
+        var summaryDict = summary.ToDictionary(x => x.Severity, x => x.Count);
+        Assert.Equal(0, summaryDict["Critical"]);
+        Assert.Equal(1, summaryDict["High"]);
+        Assert.Equal(1, summaryDict["Medium"]);
+        Assert.Equal(1, summaryDict["Low"]);
+
+        var expectedEnumNames = Enum.GetNames<IncidentSeverity>();
+        Assert.Equal(expectedEnumNames.Length, summary.Count);
+        Assert.True(expectedEnumNames.ToHashSet().SetEquals(summary.Select(x => x.Severity)));
     }
 }

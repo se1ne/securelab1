@@ -88,7 +88,7 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             })
             .ToList();
         var traceId = System.Diagnostics.Activity.Current?.TraceId.ToString() ?? "N/A";
-        logger.LogInformation("Сформовано підсумок інцидентів за критичністю. Груп: {GroupCount}, TraceId: {TraceId}", result.Count, traceId);
+        logger.LogInformation("Created severity summary list. Groups: {GroupCount}, TraceId: {TraceId}", result.Count, traceId);
 
         return result;
     }
