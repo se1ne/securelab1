@@ -33,7 +33,8 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
 
     public Task<IncidentDetailsResponse?> GetDetailsAsync(Guid id, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Loading incident {IncidentId}", id);
+        var traceId = System.Diagnostics.Activity.Current?.TraceId.ToString() ?? "N/A";
+        logger.LogInformation("Loading incident {IncidentId}, TraceId: {TraceId}", id, traceId);
 
         return dbContext.Incidents
             .AsNoTracking()
@@ -86,6 +87,9 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
                 return new IncidentSeveritySummaryResponse(severityString, count);
             })
             .ToList();
+        var traceId = System.Diagnostics.Activity.Current?.TraceId.ToString() ?? "N/A";
+        logger.LogInformation("Сформовано підсумок інцидентів за критичністю. Груп: {GroupCount}, TraceId: {TraceId}", result.Count, traceId);
+
         return result;
     }
 
