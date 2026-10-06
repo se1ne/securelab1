@@ -75,7 +75,7 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
         Assert.Equal(0, summaryDict["Critical"]);
         Assert.Equal(1, summaryDict["High"]);
         Assert.Equal(1, summaryDict["Medium"]);
-        Assert.Equal(1, summaryDict["Low"]);
+        Assert.Equal(3, summaryDict["Low"]);
 
         var expectedEnumNames = Enum.GetNames<IncidentSeverity>();
         Assert.Equal(expectedEnumNames.Length, summary.Count);
