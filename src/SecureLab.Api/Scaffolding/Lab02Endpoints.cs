@@ -53,11 +53,31 @@ public static class Lab02Endpoints
             else if (request.OccurredAtUtc > now.AddMinutes(5))
                 errors["occurredAtUtc"] = ["Час настання не може випереджати поточний час більш ніж на 5 хвилин."];
 
+            var title = request.Title!.Trim();
+            var description = request.Description!.Trim();
+
+            if (severityIsValid
+                && (severity == IncidentSeverity.High || severity == IncidentSeverity.Critical)
+                && !errors.ContainsKey("description")
+                && description.Length < 40)
+                errors["description"] = ["Для High або Critical опис має містити щонайменше 40 символів."];            
+
             if (errors.Count > 0)
                 return Results.ValidationProblem(errors);
 
-            var title = request.Title!.Trim();
-            var description = request.Description!.Trim();
+            var activeStatuses = new[]
+            {
+                IncidentStatus.New, IncidentStatus.Triaged,
+                IncidentStatus.InProgress, IncidentStatus.Resolved
+            };
+            var isDuplicate = await db.Incidents.AnyAsync(
+                item => item.Title == title && activeStatuses.Contains(item.Status), ct);
+            if (isDuplicate)
+                return Results.Problem(
+                    statusCode: StatusCodes.Status409Conflict,
+                    title: "Інцидент із такою темою вже активний",
+                    detail: "Інцидент з такою самою темою вже існує в одному з активних статусів.");            
+
             var occurredAtUtc = request.OccurredAtUtc!.Value.ToUniversalTime();
 
             var incident = new Incident
@@ -72,7 +92,9 @@ public static class Lab02Endpoints
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
             };
-
+            db.Incidents.Add(incident);
+            await db.SaveChangesAsync(ct);
+            
             var response = new CreatedIncidentResponse(
                 incident.Id, incident.Title, incident.Severity.ToString(),
                 incident.Status.ToString(), incident.OccurredAtUtc, incident.CreatedAtUtc);
