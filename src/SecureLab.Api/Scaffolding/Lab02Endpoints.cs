@@ -9,21 +9,20 @@ namespace SecureLab.Api.Scaffolding;
 public static class Lab02Endpoints
 {
     private static string EscapeLike(string value) =>
-    value.Replace("\\", "\\\\")   // спочатку сам escape-символ
+    value.Replace("\\", "\\\\")
          .Replace("%", "\\%")
          .Replace("_", "\\_");
+
     public static void MapLab02Endpoints(this WebApplication app)
     {
         app.MapGet("/api/incidents/search", async (string? q, string? sortBy, SecureLabDbContext db, CancellationToken ct) =>
         {
-            // q стає параметром, а не частиною SQL-тексту.
             var pattern = "%" + EscapeLike(q ?? "") + "%";
 
             var found = db.Incidents.AsNoTracking()
                 .Where(item => EF.Functions.ILike(item.Title, pattern, "\\")
                             || EF.Functions.ILike(item.Description, pattern, "\\"));
 
-            // switch = allowlist: клієнт лише обирає гілку, назви колонок від нього не приймаємо.
             IQueryable<Incident>? ordered = sortBy switch
             {
                 null or "" or "createdAtUtc" => found
@@ -85,14 +84,22 @@ public static class Lab02Endpoints
             else if (request.OccurredAtUtc > now.AddMinutes(5))
                 errors["occurredAtUtc"] = ["Час настання не може випереджати поточний час більш ніж на 5 хвилин."];
 
-            var title = request.Title!.Trim();
-            var description = request.Description!.Trim();
+            var title = request.Title?.Trim() ?? "";
+            var description = request.Description?.Trim() ?? "";
 
             if (severityIsValid
                 && (severity == IncidentSeverity.High || severity == IncidentSeverity.Critical)
                 && !errors.ContainsKey("description")
                 && description.Length < 40)
                 errors["description"] = ["Для High або Critical опис має містити щонайменше 40 символів."];            
+
+            if (!errors.ContainsKey("title")
+                && !errors.ContainsKey("description")
+                && string.Equals(title, description, StringComparison.Ordinal))
+            {
+                errors["description"] =
+                    ["Опис не може повністю збігатися з темою інциденту."];
+}
 
             if (errors.Count > 0)
                 return Results.ValidationProblem(errors);
