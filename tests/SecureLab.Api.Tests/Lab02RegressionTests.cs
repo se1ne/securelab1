@@ -10,10 +10,20 @@ namespace SecureLab.Api.Tests;
 public sealed class Lab02RegressionTests(SecureLabApiFactory factory)
     : IClassFixture<SecureLabApiFactory>
 {
+    private async Task<HttpClient> CreateAuthenticatedClientAsync()
+    {
+        var password =
+            Environment.GetEnvironmentVariable("SeedUsers__Password")
+            ?? throw new InvalidOperationException(
+                "Set local SeedUsers__Password outside Git.");
+
+        return await factory.LoginAsync("alice", password);
+    }
+
     [Fact]
     public async Task T02_InvalidDto_Returns400WithTitleError()
     {
-        using var client = factory.CreateClient();
+        using var client = await CreateAuthenticatedClientAsync();
 
         var body = new
         {
@@ -38,7 +48,7 @@ public sealed class Lab02RegressionTests(SecureLabApiFactory factory)
     [Fact]
     public async Task T03_DuplicateActiveTitle_Returns409()
     {
-        using var client = factory.CreateClient();
+        using var client = await CreateAuthenticatedClientAsync();
 
         var title = $"T03-{Guid.NewGuid():N}";
 
@@ -67,7 +77,7 @@ public sealed class Lab02RegressionTests(SecureLabApiFactory factory)
     [Fact]
     public async Task T09_HighDescriptionBoundary_Rejects39AndAccepts40()
     {
-        using var client = factory.CreateClient();
+        using var client = await CreateAuthenticatedClientAsync();
 
         var title39 = $"T09-39-{Guid.NewGuid():N}";
         var title40 = $"T09-40-{Guid.NewGuid():N}";
@@ -153,7 +163,7 @@ public sealed class Lab02RegressionTests(SecureLabApiFactory factory)
     [Fact]
     public async Task T10_DescriptionEqualToTitle_Returns400()
     {
-        using var client = factory.CreateClient();
+        using var client = await CreateAuthenticatedClientAsync();
 
         var rejectedTitle = $"T10-Reject-{Guid.NewGuid():N}";
         var acceptedTitle = $"T10-Accept-{Guid.NewGuid():N}";
@@ -203,7 +213,7 @@ public sealed class Lab02RegressionTests(SecureLabApiFactory factory)
     [Fact]
     public async Task A02_Overposting_ServerManagedFieldsCannotBeOverridden()
     {
-        using var client = factory.CreateClient();
+        using var client = await CreateAuthenticatedClientAsync();
 
         var title = $"A02-{Guid.NewGuid():N}";
         var suppliedId = Guid.Parse("22222222-2222-2222-2222-222222222222");

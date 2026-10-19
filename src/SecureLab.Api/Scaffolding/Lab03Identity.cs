@@ -3,6 +3,8 @@ using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
 using System.Net.Mail;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace SecureLab.Api.Scaffolding;
 
@@ -133,22 +135,83 @@ public static class Lab03Identity
 
             return Results.Created("/api/me", response);
         });
-        app.MapPost("/api/auth/login", async (LoginInput input, SignInManager<ApplicationUser> signIn) =>
+        app.MapPost("/api/auth/login", async (
+            LoginInput input,
+            SignInManager<ApplicationUser> signIn,
+            HttpContext context,
+            ILogger<Program> logger) =>
         {
-            if (string.IsNullOrWhiteSpace(input.UserName) || string.IsNullOrEmpty(input.Password))
+            if (string.IsNullOrWhiteSpace(input.UserName)
+                || string.IsNullOrEmpty(input.Password))
+            {
+                logger.LogInformation(
+                    "Authentication event {EventType}: user {UserName}, result {Result}, trace {TraceId}",
+                    "login",
+                    input.UserName ?? "(missing)",
+                    "failure",
+                    context.TraceIdentifier);
+
                 return Results.Unauthorized();
-            var result = await signIn.PasswordSignInAsync(input.UserName, input.Password, false, false);
-            return result.Succeeded ? Results.NoContent() : Results.Unauthorized();
-        });
-        app.MapPost("/api/auth/logout", () => Results.StatusCode(StatusCodes.Status501NotImplemented));
-        // Навмисно хибна навчальна довіра: ЛР 03 замінює заявлений id на verified principal.
-        app.MapGet("/api/me", async (HttpContext context, SecureLabDbContext db) =>
+            }
+
+            var result = await signIn.PasswordSignInAsync(
+                input.UserName,
+                input.Password,
+                isPersistent: false,
+                lockoutOnFailure: false);
+
+            logger.LogInformation(
+                "Authentication event {EventType}: user {UserName}, result {Result}, trace {TraceId}",
+                "login",
+                input.UserName,
+                result.Succeeded ? "success" : "failure",
+                context.TraceIdentifier);
+
+            return result.Succeeded
+                ? Results.NoContent()
+                : Results.Unauthorized();
+        })
+        .RequireRateLimiting("login");
+        app.MapPost("/api/auth/logout", async (
+            SignInManager<ApplicationUser> signIn) =>
         {
-            if (!Guid.TryParse(context.Request.Headers["X-Demo-UserId"], out var claimedId))
-                return Results.StatusCode(StatusCodes.Status501NotImplemented);
-            var user = await db.Users.FindAsync(claimedId);
-            return user is null ? Results.NotFound() : Results.Ok(new { user.Id, user.UserName, user.DisplayName });
-        });
+            await signIn.SignOutAsync();
+
+            return Results.NoContent();
+        })
+        .RequireAuthorization();
+        // Навмисно хибна навчальна довіра: ЛР 03 замінює заявлений id на verified principal.
+        app.MapGet("/api/me", async (
+            HttpContext context,
+            UserManager<ApplicationUser> users) =>
+        {
+            var userIdValue =
+                context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Authenticated user identifier is invalid.");
+            }
+
+            var user = await users.FindByIdAsync(userId.ToString());
+
+            if (user is null)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Authenticated user was not found.");
+            }
+
+            var response = new CurrentUserResponse(
+                user.Id,
+                user.UserName ?? string.Empty,
+                user.DisplayName);
+
+            return Results.Ok(response);
+        })
+        .RequireAuthorization();
         // Приклад лише mechanics: не повертає identity і не реалізує оцінювану operation.
         app.MapGet("/api/auth/session-check", () => Results.NoContent()).RequireAuthorization();
     }
@@ -162,3 +225,8 @@ public sealed record RegistrationResponse(
     string DisplayName
 );
 public sealed record LoginInput(string? UserName, string? Password);
+
+public sealed record CurrentUserResponse(
+    Guid Id,
+    string UserName,
+    string DisplayName);
