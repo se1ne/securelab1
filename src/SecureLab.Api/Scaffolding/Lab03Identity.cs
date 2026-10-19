@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
+using System.Net.Mail;
+using Microsoft.AspNetCore.Mvc;
 
 namespace SecureLab.Api.Scaffolding;
 
@@ -35,22 +37,101 @@ public static class Lab03Identity
 
     public static void MapLab03Identity(this WebApplication app)
     {
-        app.MapPost("/api/auth/register", async (RegistrationInput input, UserManager<ApplicationUser> users) =>
+        app.MapPost("/api/auth/register", async (
+            RegistrationInput input,
+            UserManager<ApplicationUser> users) =>
         {
-            // ЛР 03: завершіть DTO validation та перевірки довірчої межі.
-            if (string.IsNullOrWhiteSpace(input.UserName) || string.IsNullOrWhiteSpace(input.Email)
-                || string.IsNullOrWhiteSpace(input.DisplayName) || string.IsNullOrEmpty(input.Password))
-                return Results.BadRequest();
+            var errors = new Dictionary<string, string[]>();
+
+            var userName = input.UserName?.Trim() ?? "";
+            var email = input.Email?.Trim() ?? "";
+            var displayName = input.DisplayName?.Trim() ?? "";
+
+            if (string.IsNullOrWhiteSpace(userName))
+                errors["userName"] = ["Ім'я користувача обов'язкове."];
+            else if (userName.Length > 256)
+                errors["userName"] = ["Ім'я користувача не може перевищувати 256 символів."];
+
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                errors["email"] = ["Email обов'язковий."];
+            }
+            else if (email.Length > 256)
+            {
+                errors["email"] = ["Email не може перевищувати 256 символів."];
+            }
+            else
+            {
+                try
+                {
+                    _ = new MailAddress(email);
+                }
+                catch
+                {
+                    errors["email"] = ["Email має некоректний формат."];
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(displayName))
+                errors["displayName"] = ["Відображуване ім'я обов'язкове."];
+            else if (displayName.Length > 120)
+                errors["displayName"] = ["Відображуване ім'я не може перевищувати 120 символів."];
+
+            if (string.IsNullOrEmpty(input.Password))
+                errors["password"] = ["Пароль обов'язковий."];
+
+            if (errors.Count > 0)
+                return Results.ValidationProblem(errors);
+
             var user = new ApplicationUser
             {
-                Id = Guid.NewGuid(), UserName = input.UserName.Trim(), Email = input.Email.Trim(),
-                DisplayName = input.DisplayName.Trim()
+                Id = Guid.NewGuid(),
+                UserName = userName,
+                Email = email,
+                DisplayName = displayName
             };
-            var result = await users.CreateAsync(user, input.Password);
-            if (!result.Succeeded) return Results.BadRequest(new { message = "Registration failed" });
-            var role = await users.AddToRoleAsync(user, DbSeeder.ReporterRole);
-            if (!role.Succeeded) throw new InvalidOperationException("Default role assignment failed.");
-            return Results.Created("/api/me", new { user.Id, user.UserName, user.DisplayName });
+
+            var result = await users.CreateAsync(user, input.Password!);
+
+            if (!result.Succeeded)
+            {
+                var codes = result.Errors
+                    .Select(error => error.Code)
+                    .ToArray();
+
+                if (codes.Contains("DuplicateUserName")
+                    || codes.Contains("DuplicateEmail"))
+                {
+                    return Results.Conflict(new ProblemDetails
+                    {
+                        Status = StatusCodes.Status409Conflict,
+                        Title = "Registration conflict",
+                        Detail = "Користувач з таким ім'ям або email уже існує."
+                    });
+                }
+
+                return Results.ValidationProblem(
+                    new Dictionary<string, string[]>
+                    {
+                        ["registration"] =
+                        [
+                            "Реєстрацію відхилено. Перевірте введені дані."
+                        ]
+                    });
+            }
+
+            var roleResult = await users.AddToRoleAsync(user, DbSeeder.ReporterRole);
+
+            if (!roleResult.Succeeded)
+                throw new InvalidOperationException("Default role assignment failed.");
+
+            var response = new RegistrationResponse(
+                user.Id,
+                user.UserName!,
+                user.DisplayName
+            );
+
+            return Results.Created("/api/me", response);
         });
         app.MapPost("/api/auth/login", async (LoginInput input, SignInManager<ApplicationUser> signIn) =>
         {
@@ -74,4 +155,10 @@ public static class Lab03Identity
 }
 
 public sealed record RegistrationInput(string? UserName, string? Email, string? DisplayName, string? Password);
+
+public sealed record RegistrationResponse(
+    Guid Id,
+    string UserName,
+    string DisplayName
+);
 public sealed record LoginInput(string? UserName, string? Password);
