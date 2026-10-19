@@ -36,6 +36,42 @@ public sealed class Lab02RegressionTests(SecureLabApiFactory factory)
     }
 
     [Fact]
+    public async Task UnicodeInvisibleSymbolsError()
+    {
+        using var client = factory.CreateClient();
+
+        var body = new
+        {
+            title = "​\u200b",
+            description = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            severity = "Low",
+            occurredAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1)
+        };
+
+        var createdTitle = "​\u200b";
+
+        try
+        {
+            using var response = await client.PostAsJsonAsync("/api/incidents", body);
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+            using var json = JsonDocument.Parse(
+                await response.Content.ReadAsStringAsync());
+
+            var errors = json.RootElement.GetProperty("errors");
+
+            Assert.True(errors.TryGetProperty("title", out _));
+        }
+        finally
+        {
+            await DeleteIncidentsByTitleAsync(createdTitle);
+        }
+
+    }
+
+
+    [Fact]
     public async Task T03_DuplicateActiveTitle_Returns409()
     {
         using var client = factory.CreateClient();

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
@@ -86,6 +87,13 @@ public static class Lab02Endpoints
 
             var title = request.Title?.Trim() ?? "";
             var description = request.Description?.Trim() ?? "";
+
+            if (!errors.ContainsKey("title")
+                && title.Any( ch => CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.Format))
+            {
+                errors["title"] =
+                    ["Назва не може містити невидимі Unicode символи."];
+}
 
             if (severityIsValid
                 && (severity == IncidentSeverity.High || severity == IncidentSeverity.Critical)
