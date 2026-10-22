@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
+using System.Diagnostics;
+using System.Reflection;
 
 namespace SecureLab.Api.Tests;
 
@@ -362,6 +364,59 @@ public async Task A07_UnknownUserAndWrongPassword_HaveSameExternalResult()
         Assert.Equal(
             HttpStatusCode.NoContent,
             response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Timings_MissingUser_or_WrongPassword()
+    {
+        using var scope = factory.Services.CreateScope();
+
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        var bob = await users.FindByNameAsync("bob");
+        Assert.NotNull(bob);
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        const int measurements = 9;
+
+        await users.FindByNameAsync($"ghost-v1-{suffix}-0");
+
+        var missingUserTicks = 0L;
+
+        for (var i = 1; i <= measurements; i++)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var missingUser = await users.FindByNameAsync($"ghost-v1-{suffix}-{i}");
+
+            stopwatch.Stop();
+            Assert.Null(missingUser);
+
+            missingUserTicks += stopwatch.ElapsedTicks;
+        }
+
+        await users.CheckPasswordAsync(bob, "Synthetic-Wrong-1!");
+
+        var wrongPasswordTicks = 0L;
+
+        for (var i = 1; i <= measurements; i++)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var wrongPassword = await users.CheckPasswordAsync(bob, "Synthetic-Wrong-1!");
+
+            stopwatch.Stop();
+            Assert.False(wrongPassword);
+
+            wrongPasswordTicks += stopwatch.ElapsedTicks;
+        }
+
+        var missingUserAverage = missingUserTicks * 1000.0 / Stopwatch.Frequency / measurements;
+
+        var wrongPasswordAverage = wrongPasswordTicks * 1000.0 / Stopwatch.Frequency / measurements;
+
+        Console.WriteLine($"Missing user FindByNameAsync average: {missingUserAverage} ms");
+
+        Console.WriteLine($"Wrong password CheckPasswordAsync average: {wrongPasswordAverage} ms");
     }
 
     [Fact]
