@@ -31,14 +31,21 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .ToListAsync(cancellationToken);
     }
 
-    public Task<IncidentDetailsResponse?> GetDetailsAsync(Guid id, CancellationToken cancellationToken)
+    public Task<IncidentDetailsResponse?> GetDetailsAsync(
+        Guid id,
+        Guid requestingUserId,
+        bool isPrivilegedReader,
+        CancellationToken cancellationToken)
     {
         var traceId = System.Diagnostics.Activity.Current?.TraceId.ToString() ?? "N/A";
-        logger.LogInformation("Loading incident {IncidentId}, TraceId: {TraceId}", id, traceId);
+        logger.LogInformation(
+            "Loading incident {IncidentId} for user {UserId}, TraceId: {TraceId}",
+            id, requestingUserId, traceId);
 
         return dbContext.Incidents
             .AsNoTracking()
-            .Where(incident => incident.Id == id)
+            .Where(incident => incident.Id == id
+                && (isPrivilegedReader || incident.OwnerUserId == requestingUserId))
             .Select(incident => new IncidentDetailsResponse(
                 incident.Id,
                 incident.Title,

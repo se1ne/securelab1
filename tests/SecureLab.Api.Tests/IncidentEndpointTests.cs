@@ -13,6 +13,10 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
 {
     private readonly HttpClient _client = factory.CreateClient();
 
+    private static string StudyPassword =>
+        Environment.GetEnvironmentVariable("SeedUsers__Password")
+        ?? throw new InvalidOperationException("Set local SeedUsers__Password outside Git.");
+
     [Fact]
     public async Task GetList_ReturnsSeededIncidents()
     {
@@ -25,9 +29,50 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
     }
 
     [Fact]
+    public async Task A01_AnonymousDetails_Returns401()
+    {
+        using var response = await _client.GetAsync($"/api/incidents/{DbSeeder.AliceIncidentId}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A02_OwnerDetails_ReturnsOk()
+    {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        using var response = await alice.GetAsync($"/api/incidents/{DbSeeder.AliceIncidentId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A03_NonOwnerDetails_Returns404()
+    {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        using var response = await alice.GetAsync($"/api/incidents/{DbSeeder.BobIncidentId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task A03R_AnalystDetails_ReturnsOk()
+    {
+        using var morgan = await factory.LoginAsync("morgan", StudyPassword);
+
+        using var response = await morgan.GetAsync($"/api/incidents/{DbSeeder.AliceIncidentId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task GetDetails_ForUnknownId_ReturnsProblemDetails404()
     {
-        using var response = await _client.GetAsync($"/api/incidents/{Guid.NewGuid()}");
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        using var response = await alice.GetAsync($"/api/incidents/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
@@ -36,8 +81,9 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
     [Fact]
     public async Task GetDetails_DoesNotExposeInternalOwnerFields()
     {
-        using var response = await _client.GetAsync(
-            $"/api/incidents/{DbSeeder.AliceIncidentId}");
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        using var response = await alice.GetAsync($"/api/incidents/{DbSeeder.AliceIncidentId}");
         var json = await response.Content.ReadAsStringAsync();
         using var document = JsonDocument.Parse(json);
 
@@ -59,7 +105,6 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
     [Fact]
     public async Task GetSeveritySummary_ReturnsExpectedDataAndCoversAllEnumValues()
     {
-
         var response = await _client.GetAsync("/api/incidents/severity-summary");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

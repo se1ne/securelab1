@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using SecureLab.Api.Data;
 using SecureLab.Api.Application.Incidents;
 using SecureLab.Api.Data.Entities;
 using SecureLab.Api.Presentation.Contracts;
@@ -17,8 +19,10 @@ public static class IncidentEndpoints
             .ProducesValidationProblem();
 
         group.MapGet("/{id:guid}", GetDetailsAsync)
+            .RequireAuthorization()
             .WithName("GetIncidentDetails")
             .Produces<IncidentDetailsResponse>()
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapGet("/severity-summary", GetSeveritySummaryAsync)
@@ -53,10 +57,21 @@ public static class IncidentEndpoints
 
     private static async Task<IResult> GetDetailsAsync(
         Guid id,
+        HttpContext httpContext,
         IncidentQueries queries,
         CancellationToken cancellationToken)
     {
-        var incident = await queries.GetDetailsAsync(id, cancellationToken);
+        var userIdValue = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdValue, out var userId))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Authenticated user identifier is invalid.");
+        }
+
+        var isPrivilegedReader = httpContext.User.IsInRole(DbSeeder.AnalystRole);
+
+        var incident = await queries.GetDetailsAsync(id, userId, isPrivilegedReader, cancellationToken);
         return incident is null
             ? Results.Problem(
                 title: "Інцидент не знайдено",
