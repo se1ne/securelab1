@@ -94,6 +94,100 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
     }
 
     [Fact]
+    public async Task A01_AnonymousUpdate_Returns401()
+    {
+        var payload = new
+        {
+            title = "Анонімна спроба",
+            description = "Опис для перевірки відмови без автентифікації.",
+            severity = "Low",
+            occurredAtUtc = DateTimeOffset.UtcNow.AddHours(-1)
+        };
+
+        using var response = await _client.PutAsJsonAsync(
+            $"/api/incidents/{DbSeeder.AliceIncidentId}", payload);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A02_OwnerUpdate_ReturnsOk()
+    {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+        var originalTitle = "Підозрілий лист із вкладенням";
+
+        try
+        {
+            var payload = new
+            {
+                title = "Оновлена тема (тест)",
+                description = "Оновлений опис інциденту для перевірки update.",
+                severity = "Low",
+                occurredAtUtc = DateTimeOffset.UtcNow.AddHours(-1)
+            };
+
+            using var response = await alice.PutAsJsonAsync(
+                $"/api/incidents/{DbSeeder.AliceIncidentId}", payload);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(json);
+            Assert.Equal("Оновлена тема (тест)", document.RootElement.GetProperty("title").GetString());
+        }
+        finally
+        {
+            var restorePayload = new
+            {
+                title = originalTitle,
+                description = "Одержано лист нібито від деканату. Вкладення не відкривалося.",
+                severity = "Medium",
+                occurredAtUtc = DateTimeOffset.Parse("2026-08-01T08:30:00Z")
+            };
+            await alice.PutAsJsonAsync($"/api/incidents/{DbSeeder.AliceIncidentId}", restorePayload);
+        }
+    }
+
+    [Fact]
+    public async Task A03_NonOwnerUpdate_Returns404()
+    {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        var payload = new
+        {
+            title = "Спроба чужого редагування",
+            description = "Опис для перевірки відмови при редагуванні чужого інциденту.",
+            severity = "Low",
+            occurredAtUtc = DateTimeOffset.UtcNow.AddHours(-1)
+        };
+
+        using var response = await alice.PutAsJsonAsync(
+            $"/api/incidents/{DbSeeder.BobIncidentId}", payload);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task Update_InvalidSeverity_Returns400()
+    {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        var payload = new
+        {
+            title = "Коректна тема",
+            description = "Коректний опис для перевірки відмови за severity.",
+            severity = "7",
+            occurredAtUtc = DateTimeOffset.UtcNow.AddHours(-1)
+        };
+
+        using var response = await alice.PutAsJsonAsync(
+            $"/api/incidents/{DbSeeder.AliceIncidentId}", payload);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ClientScript_DoesNotUseDangerousInnerHtmlSink()
     {
         var script = await _client.GetStringAsync("/app.js");

@@ -36,3 +36,9 @@ public sealed record CreatedIncidentResponse(
     string Status,
     DateTimeOffset OccurredAtUtc,
     DateTimeOffset CreatedAtUtc);
+
+public sealed record UpdateIncidentRequest(
+    string? Title,
+    string? Description,
+    string? Severity,
+    DateTimeOffset? OccurredAtUtc);

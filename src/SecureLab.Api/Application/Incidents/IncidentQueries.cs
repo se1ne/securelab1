@@ -67,6 +67,35 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .SingleOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<IncidentDetailsResponse?> UpdateContentAsync(
+        Guid id,
+        Guid requestingUserId,
+        string title,
+        string description,
+        IncidentSeverity severity,
+        DateTimeOffset occurredAtUtc,
+        CancellationToken cancellationToken)
+    {
+        var incident = await dbContext.Incidents
+            .Where(item => item.Id == id && item.OwnerUserId == requestingUserId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (incident is null)
+        {
+            return null;
+        }
+
+        incident.Title = title;
+        incident.Description = description;
+        incident.Severity = severity;
+        incident.OccurredAtUtc = occurredAtUtc;
+        incident.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return await GetDetailsAsync(id, requestingUserId, isPrivilegedReader: false, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(CancellationToken cancellationToken = default)
     {
         var rawSummary = await dbContext.Incidents
