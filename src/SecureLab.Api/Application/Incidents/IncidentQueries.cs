@@ -5,6 +5,12 @@ using SecureLab.Api.Presentation.Contracts;
 
 namespace SecureLab.Api.Application.Incidents;
 
+    public enum TriageResult
+    {
+        Success,
+        NotFound,
+        InvalidTransition
+    }
 public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<IncidentQueries> logger)
 {
     public async Task<IReadOnlyList<IncidentListItemResponse>> GetListAsync(
@@ -153,6 +159,32 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return true;
+    }
+
+    public async Task<TriageResult> TriageAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var incident = await dbContext.Incidents
+            .Where(item => item.Id == id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (incident is null)
+        {
+            return TriageResult.NotFound;
+        }
+
+        if (incident.Status != IncidentStatus.New)
+        {
+            return TriageResult.InvalidTransition;
+        }
+
+        incident.Status = IncidentStatus.Triaged;
+        incident.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TriageResult.Success;
     }
 
 }

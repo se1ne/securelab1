@@ -30,6 +30,63 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
         Assert.Contains(incidents, incident => incident.Id == DbSeeder.BobIncidentId);
     }
 
+[Fact]
+public async Task A06_ReporterTriage_Returns403()
+{
+    using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+    using var response = await alice.PostAsJsonAsync(
+        $"/api/incidents/{DbSeeder.AliceIncidentId}/triage", new { });
+
+    Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+}
+
+[Fact]
+public async Task A07_AnalystTriage_NewIncident_ReturnsNoContent()
+{
+    using var morgan = await factory.LoginAsync("morgan", StudyPassword);
+    using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+    var createPayload = new
+    {
+        title = "Тимчасовий інцидент для triage",
+        description = "Створено спеціально для перевірки переходу New у Triaged.",
+        severity = "Low",
+        occurredAtUtc = DateTimeOffset.UtcNow.AddHours(-1)
+    };
+    using var createResponse = await alice.PostAsJsonAsync("/api/incidents", createPayload);
+    var createdJson = await createResponse.Content.ReadAsStringAsync();
+    using var createdDocument = JsonDocument.Parse(createdJson);
+    var createdId = createdDocument.RootElement.GetProperty("id").GetGuid();
+
+    using var triageResponse = await morgan.PostAsJsonAsync(
+        $"/api/incidents/{createdId}/triage", new { });
+
+    Assert.Equal(HttpStatusCode.NoContent, triageResponse.StatusCode);
+
+    using var cleanup = await alice.DeleteAsync($"/api/incidents/{createdId}");
+}
+
+[Fact]
+public async Task Triage_AlreadyTriaged_Returns409()
+{
+    using var morgan = await factory.LoginAsync("morgan", StudyPassword);
+
+    using var response = await morgan.PostAsJsonAsync(
+        $"/api/incidents/{DbSeeder.AliceIncidentId}/triage", new { });
+
+    Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+}
+
+[Fact]
+public async Task A01_AnonymousTriage_Returns401()
+{
+    using var response = await _client.PostAsJsonAsync(
+        $"/api/incidents/{DbSeeder.AliceIncidentId}/triage", new { });
+
+    Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+}
+
     [Fact]
     public async Task A02_OwnerDelete_ReturnsNoContent()
     {

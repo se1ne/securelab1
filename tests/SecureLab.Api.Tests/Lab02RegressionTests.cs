@@ -7,6 +7,7 @@ using SecureLab.Api.Data;
 
 namespace SecureLab.Api.Tests;
 
+[Collection("Serialized")]
 public sealed class Lab02RegressionTests(SecureLabApiFactory factory)
     : IClassFixture<SecureLabApiFactory>
 {

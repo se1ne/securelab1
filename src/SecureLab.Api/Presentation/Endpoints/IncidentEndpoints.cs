@@ -4,6 +4,7 @@ using SecureLab.Api.Application.Incidents;
 using SecureLab.Api.Data.Entities;
 using SecureLab.Api.Presentation.Contracts;
 
+
 namespace SecureLab.Api.Presentation.Endpoints;
 
 public static class IncidentEndpoints
@@ -43,6 +44,14 @@ public static class IncidentEndpoints
             .WithName("DeleteIncident")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{id:guid}/triage", TriageAsync)
+            .RequireAuthorization()
+            .WithName("TriageIncident")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
 
         return endpoints;
     }
@@ -201,6 +210,36 @@ public static class IncidentEndpoints
                 title: "Інцидент не знайдено",
                 detail: $"Інцидент '{id}' не існує.",
                 statusCode: StatusCodes.Status404NotFound);
+    }
+
+    private static async Task<IResult> TriageAsync(
+        Guid id,
+        HttpContext httpContext,
+        IncidentQueries queries,
+        CancellationToken cancellationToken)
+    {
+        if (!httpContext.User.IsInRole(DbSeeder.AnalystRole))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "Лише Analyst може виконувати цю дію.");
+        }
+
+        var result = await queries.TriageAsync(id, cancellationToken);
+
+        return result switch
+        {
+            TriageResult.Success => Results.NoContent(),
+            TriageResult.NotFound => Results.Problem(
+                title: "Інцидент не знайдено",
+                detail: $"Інцидент '{id}' не існує.",
+                statusCode: StatusCodes.Status404NotFound),
+            TriageResult.InvalidTransition => Results.Problem(
+                title: "Перехід неможливий",
+                detail: "Перевести в Triaged можна лише інцидент у стані New.",
+                statusCode: StatusCodes.Status409Conflict),
+            _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)
+        };
     }
 
     private static async Task<IResult> GetSeveritySummaryAsync(IncidentQueries queries, CancellationToken cancellationToken)
