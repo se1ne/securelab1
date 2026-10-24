@@ -42,3 +42,11 @@ public sealed record UpdateIncidentRequest(
     string? Description,
     string? Severity,
     DateTimeOffset? OccurredAtUtc);
+
+public sealed record IncidentCommentDetailsResponse(
+    Guid Id,
+    Guid IncidentId,
+    string AuthorDisplayName,
+    string Text,
+    bool IsInternal,
+    DateTimeOffset CreatedAtUtc);

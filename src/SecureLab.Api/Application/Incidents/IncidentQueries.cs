@@ -187,4 +187,21 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
         return TriageResult.Success;
     }
 
+    public async Task<IncidentCommentDetailsResponse?> GetCommentAsync(
+    Guid commentId,
+    CancellationToken cancellationToken)
+{
+    return await dbContext.IncidentComments
+        .AsNoTracking()
+        .Where(comment => comment.Id == commentId)
+        .Select(comment => new IncidentCommentDetailsResponse(
+            comment.Id,
+            comment.IncidentId,
+            comment.Author.DisplayName,
+            comment.Text,
+            comment.IsInternal,
+            comment.CreatedAtUtc))
+        .SingleOrDefaultAsync(cancellationToken);
+}
+
 }

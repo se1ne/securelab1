@@ -11,6 +11,14 @@ public static class IncidentEndpoints
 {
     public static IEndpointRouteBuilder MapIncidentEndpoints(this IEndpointRouteBuilder endpoints)
     {
+             
+        endpoints.MapGet("/api/incident-comments/{id:guid}", GetCommentAsync)
+            .RequireAuthorization()
+            .WithName("GetIncidentComment")
+            .Produces<IncidentCommentDetailsResponse>()
+            .ProducesProblem(StatusCodes.Status403Forbidden)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+        
         var group = endpoints.MapGroup("/api/incidents")
             .WithTags("Incidents");
 
@@ -55,6 +63,8 @@ public static class IncidentEndpoints
 
         return endpoints;
     }
+
+   
 
     private static async Task<IResult> GetListAsync(
         string? status,
@@ -240,6 +250,29 @@ public static class IncidentEndpoints
                 statusCode: StatusCodes.Status409Conflict),
             _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)
         };
+    }
+
+    private static async Task<IResult> GetCommentAsync(
+        Guid id,
+        HttpContext httpContext,
+        IncidentQueries queries,
+        CancellationToken cancellationToken)
+    {
+        if (!httpContext.User.IsInRole(DbSeeder.AnalystRole))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "Доступ до внутрішніх коментарів дозволений лише Analyst.");
+        }
+
+        var comment = await queries.GetCommentAsync(id, cancellationToken);
+
+        return comment is null
+            ? Results.Problem(
+                title: "Коментар не знайдено",
+                detail: $"Коментар '{id}' не існує.",
+                statusCode: StatusCodes.Status404NotFound)
+            : Results.Ok(comment);
     }
 
     private static async Task<IResult> GetSeveritySummaryAsync(IncidentQueries queries, CancellationToken cancellationToken)

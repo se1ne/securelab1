@@ -219,6 +219,41 @@ public async Task A01_AnonymousTriage_Returns401()
     }
 
     [Fact]
+    public async Task A07_AnalystReadsInternalComment_ReturnsOk()
+    {
+        using var morgan = await factory.LoginAsync("morgan", StudyPassword);
+
+        using var response = await morgan.GetAsync(
+            "/api/incident-comments/30000000-0000-0000-0000-000000000003");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(json);
+        Assert.True(document.RootElement.GetProperty("isInternal").GetBoolean());
+    }
+
+    [Fact]
+    public async Task A06_ReporterReadsInternalComment_Returns403()
+    {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        using var response = await alice.GetAsync(
+            "/api/incident-comments/30000000-0000-0000-0000-000000000003");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A01_AnonymousReadsInternalComment_Returns401()
+    {
+        using var response = await _client.GetAsync(
+            "/api/incident-comments/30000000-0000-0000-0000-000000000003");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task A01_AnonymousUpdate_Returns401()
     {
         var payload = new
