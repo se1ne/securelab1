@@ -14,9 +14,11 @@ public static class IncidentEndpoints
             .WithTags("Incidents");
 
         group.MapGet("/", GetListAsync)
+            .RequireAuthorization()
             .WithName("GetIncidents")
             .Produces<IReadOnlyList<IncidentListItemResponse>>()
-            .ProducesValidationProblem();
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapGet("/{id:guid}", GetDetailsAsync)
             .RequireAuthorization()
@@ -35,15 +37,40 @@ public static class IncidentEndpoints
             .Produces<IncidentDetailsResponse>()
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound);
+        
+        group.MapDelete("/{id:guid}", DeleteAsync)
+            .RequireAuthorization()
+            .WithName("DeleteIncident")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
         return endpoints;
     }
 
     private static async Task<IResult> GetListAsync(
         string? status,
+        HttpContext httpContext,
         IncidentQueries queries,
         CancellationToken cancellationToken)
     {
+        var userIdValue = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdValue, out var userId))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Authenticated user identifier is invalid.");
+        }
+
+        var isAnalyst = httpContext.User.IsInRole(DbSeeder.AnalystRole);
+        var isReporter = httpContext.User.IsInRole(DbSeeder.ReporterRole);
+
+        if (!isAnalyst && !isReporter)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "Доступ заборонено для цієї ролі.");
+        }
+
         IncidentStatus? parsedStatus = null;
         if (status is not null)
         {
@@ -55,11 +82,12 @@ public static class IncidentEndpoints
                     ["status"] = ["Допустимі значення: New, Triaged, InProgress, Resolved, Closed."]
                 });
             }
-
             parsedStatus = candidate;
         }
 
-        return Results.Ok(await queries.GetListAsync(parsedStatus, cancellationToken));
+        var ownerFilter = isAnalyst ? null : (Guid?)userId;
+
+        return Results.Ok(await queries.GetListAsync(parsedStatus, ownerFilter, cancellationToken));
     }
 
     private static async Task<IResult> GetDetailsAsync(
@@ -149,6 +177,30 @@ public static class IncidentEndpoints
                 detail: $"Інцидент '{id}' не існує.",
                 statusCode: StatusCodes.Status404NotFound)
             : Results.Ok(updated);
+    }
+
+    private static async Task<IResult> DeleteAsync(
+        Guid id,
+        HttpContext httpContext,
+        IncidentQueries queries,
+        CancellationToken cancellationToken)
+    {
+        var userIdValue = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdValue, out var userId))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Authenticated user identifier is invalid.");
+        }
+
+        var deleted = await queries.DeleteAsync(id, userId, cancellationToken);
+
+        return deleted
+            ? Results.NoContent()
+            : Results.Problem(
+                title: "Інцидент не знайдено",
+                detail: $"Інцидент '{id}' не існує.",
+                statusCode: StatusCodes.Status404NotFound);
     }
 
     private static async Task<IResult> GetSeveritySummaryAsync(IncidentQueries queries, CancellationToken cancellationToken)

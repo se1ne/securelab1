@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace SecureLab.Api.Tests;
 
+[Collection("Serialized")]
 public sealed class LoginRateLimitTests(
     SecureLabApiFactory factory)
     : IClassFixture<SecureLabApiFactory>
 {
+    
     [Fact]
     public async Task LoginRateLimit_Returns429_ThenRecovers()
     {

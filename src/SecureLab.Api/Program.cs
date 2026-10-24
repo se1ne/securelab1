@@ -21,19 +21,23 @@ builder.Services.AddRateLimiter(options =>
         StatusCodes.Status429TooManyRequests;
 
     options.AddPolicy("login", httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey:
-                httpContext.Connection.RemoteIpAddress?.ToString()
-                ?? "unknown",
+    {
+        var partitionKey = builder.Environment.IsDevelopment()
+            && httpContext.Request.Headers.TryGetValue("X-Test-Partition", out var testPartition)
+            ? testPartition.ToString()
+            : httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: partitionKey,
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,
                 Window = TimeSpan.FromSeconds(2),
                 QueueLimit = 0,
-                QueueProcessingOrder =
-                    QueueProcessingOrder.OldestFirst,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 AutoReplenishment = true
-            }));
+            });
+    });
 });
 
 var connectionString = builder.Configuration.GetConnectionString("SecureLab")

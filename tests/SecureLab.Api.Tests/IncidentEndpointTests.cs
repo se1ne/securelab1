@@ -8,6 +8,7 @@ using SecureLab.Api.Data.Entities;
 
 namespace SecureLab.Api.Tests;
 
+[Collection("Serialized")]
 public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
     : IClassFixture<SecureLabApiFactory>
 {
@@ -18,14 +19,81 @@ public sealed class IncidentEndpointTests(SecureLabApiFactory factory)
         ?? throw new InvalidOperationException("Set local SeedUsers__Password outside Git.");
 
     [Fact]
-    public async Task GetList_ReturnsSeededIncidents()
+    public async Task GetList_AsAnalyst_ReturnsAllSeededIncidents()
     {
-        var incidents = await _client.GetFromJsonAsync<List<IncidentListItemResponse>>(
-            "/api/incidents");
+        using var morgan = await factory.LoginAsync("morgan", StudyPassword);
+
+        var incidents = await morgan.GetFromJsonAsync<List<IncidentListItemResponse>>("/api/incidents");
 
         Assert.NotNull(incidents);
         Assert.Contains(incidents, incident => incident.Id == DbSeeder.AliceIncidentId);
         Assert.Contains(incidents, incident => incident.Id == DbSeeder.BobIncidentId);
+    }
+
+    [Fact]
+    public async Task A02_OwnerDelete_ReturnsNoContent()
+    {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        var createPayload = new
+        {
+            title = "Тимчасовий інцидент для видалення",
+            description = "Створено спеціально для перевірки delete і буде видалено цим самим тестом.",
+            severity = "Low",
+            occurredAtUtc = DateTimeOffset.UtcNow.AddHours(-1)
+        };
+
+        using var createResponse = await alice.PostAsJsonAsync("/api/incidents", createPayload);
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+        var createdJson = await createResponse.Content.ReadAsStringAsync();
+        using var createdDocument = JsonDocument.Parse(createdJson);
+        var createdId = createdDocument.RootElement.GetProperty("id").GetGuid();
+
+        using var deleteResponse = await alice.DeleteAsync($"/api/incidents/{createdId}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        using var verifyResponse = await alice.GetAsync($"/api/incidents/{createdId}");
+        Assert.Equal(HttpStatusCode.NotFound, verifyResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task A03_NonOwnerDelete_Returns404()
+    {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        using var response = await alice.DeleteAsync($"/api/incidents/{DbSeeder.BobIncidentId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task A01_AnonymousDelete_Returns401()
+    {
+        using var response = await _client.DeleteAsync($"/api/incidents/{DbSeeder.AliceIncidentId}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A05_ReporterList_ReturnsOnlyOwnIncidents()
+    {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        var incidents = await alice.GetFromJsonAsync<List<IncidentListItemResponse>>("/api/incidents");
+
+        Assert.NotNull(incidents);
+        Assert.Contains(incidents, incident => incident.Id == DbSeeder.AliceIncidentId);
+        Assert.DoesNotContain(incidents, incident => incident.Id == DbSeeder.BobIncidentId);
+    }
+
+    [Fact]
+    public async Task GetList_Anonymous_Returns401()
+    {
+        using var response = await _client.GetAsync("/api/incidents");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     [Fact]

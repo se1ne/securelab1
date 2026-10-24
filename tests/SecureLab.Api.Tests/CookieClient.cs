@@ -11,6 +11,8 @@ public static class CookieClient
         {
             BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false, HandleCookies = true
         });
+        client.DefaultRequestHeaders.Add("X-Test-Partition", Guid.NewGuid().ToString("N"));
+
         using var response = await client.PostAsJsonAsync("/api/auth/login", new { userName, password });
         if (!response.IsSuccessStatusCode)
         {

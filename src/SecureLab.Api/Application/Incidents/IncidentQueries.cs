@@ -9,14 +9,20 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
 {
     public async Task<IReadOnlyList<IncidentListItemResponse>> GetListAsync(
         IncidentStatus? status,
+        Guid? ownerUserId,
         CancellationToken cancellationToken)
     {
-        logger.LogInformation("Loading incidents with status filter {Status}", status);
+        logger.LogInformation(
+            "Loading incidents with status filter {Status} for owner {OwnerUserId}", status, ownerUserId);
 
         var query = dbContext.Incidents.AsNoTracking();
         if (status is not null)
         {
             query = query.Where(incident => incident.Status == status);
+        }
+        if (ownerUserId is not null)
+        {
+            query = query.Where(incident => incident.OwnerUserId == ownerUserId);
         }
 
         return await query
@@ -127,6 +133,26 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
         logger.LogInformation("Created severity summary list. Groups: {GroupCount}, TraceId: {TraceId}", result.Count, traceId);
 
         return result;
+    }
+
+    public async Task<bool> DeleteAsync(
+        Guid id,
+        Guid requestingUserId,
+        CancellationToken cancellationToken)
+    {
+        var incident = await dbContext.Incidents
+            .Where(item => item.Id == id && item.OwnerUserId == requestingUserId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (incident is null)
+        {
+            return false;
+        }
+
+        dbContext.Incidents.Remove(incident);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return true;
     }
 
 }
