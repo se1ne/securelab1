@@ -154,8 +154,11 @@ public static class Lab02Endpoints
                 IncidentStatus.New, IncidentStatus.Triaged,
                 IncidentStatus.InProgress, IncidentStatus.Resolved
             };
+            
             var isDuplicate = await db.Incidents.AnyAsync(
-                item => item.Title == title && activeStatuses.Contains(item.Status), ct);
+                item => item.Title == title
+                    && item.OwnerUserId == ownerUserId
+                    && activeStatuses.Contains(item.Status), ct);
             if (isDuplicate)
                 return Results.Problem(
                     statusCode: StatusCodes.Status409Conflict,

@@ -402,6 +402,54 @@ public async Task A01_AnonymousTriage_Returns401()
     }
 
     [Fact]
+    public async Task A02_DuplicateTitleAcrossDifferentOwners_DoesNotLeakExistence()
+    {
+        using var bob = await factory.LoginAsync("bob", StudyPassword);
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        var sharedTitle = $"Cross-owner-{Guid.NewGuid():N}";
+        Guid bobId = default;
+        Guid? aliceId = null;
+
+        try
+        {
+            var bobPayload = new
+            {
+                title = sharedTitle,
+                description = "Конфіденційний інцидент для перевірки відсутності витоку через 409.",
+                severity = "Low",
+                occurredAtUtc = DateTimeOffset.UtcNow.AddHours(-1)
+            };
+            using var bobResponse = await bob.PostAsJsonAsync("/api/incidents", bobPayload);
+            Assert.Equal(HttpStatusCode.Created, bobResponse.StatusCode);
+            var bobJson = await bobResponse.Content.ReadAsStringAsync();
+            using var bobDocument = JsonDocument.Parse(bobJson);
+            bobId = bobDocument.RootElement.GetProperty("id").GetGuid();
+
+            var alicePayload = new
+            {
+                title = sharedTitle,
+                description = "Той самий title від іншого власника не повинен давати 409.",
+                severity = "Low",
+                occurredAtUtc = DateTimeOffset.UtcNow.AddHours(-1)
+            };
+            using var aliceResponse = await alice.PostAsJsonAsync("/api/incidents", alicePayload);
+            Assert.Equal(HttpStatusCode.Created, aliceResponse.StatusCode);
+            var aliceJson = await aliceResponse.Content.ReadAsStringAsync();
+            using var aliceDocument = JsonDocument.Parse(aliceJson);
+            aliceId = aliceDocument.RootElement.GetProperty("id").GetGuid();
+        }
+        finally
+        {
+            using var cleanupBob = await bob.DeleteAsync($"/api/incidents/{bobId}");
+            if (aliceId is not null)
+            {
+                using var cleanupAlice = await alice.DeleteAsync($"/api/incidents/{aliceId}");
+            }
+        }
+    }
+
+    [Fact]
     public async Task GetSeveritySummary_ReturnsExpectedDataAndCoversAllEnumValues()
     {
         using var morgan = await factory.LoginAsync("morgan", StudyPassword);
