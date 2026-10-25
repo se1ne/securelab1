@@ -37,8 +37,10 @@ public static class IncidentEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapGet("/severity-summary", GetSeveritySummaryAsync)
+            .RequireAuthorization()
             .WithName("GetIncidentSeveritySummary")
-            .Produces<IReadOnlyList<IncidentSeveritySummaryResponse>>();
+            .Produces<IReadOnlyList<IncidentSeveritySummaryResponse>>()
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         group.MapPut("/{id:guid}", UpdateContentAsync)
             .RequireAuthorization()
@@ -275,9 +277,32 @@ public static class IncidentEndpoints
             : Results.Ok(comment);
     }
 
-    private static async Task<IResult> GetSeveritySummaryAsync(IncidentQueries queries, CancellationToken cancellationToken)
+    private static async Task<IResult> GetSeveritySummaryAsync(
+        HttpContext httpContext,
+        IncidentQueries queries,
+        CancellationToken cancellationToken)
     {
-        var summary = await queries.GetSeveritySummaryAsync(cancellationToken);
+        var userIdValue = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(userIdValue, out var userId))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Authenticated user identifier is invalid.");
+        }
+
+        var isAnalyst = httpContext.User.IsInRole(DbSeeder.AnalystRole);
+        var isReporter = httpContext.User.IsInRole(DbSeeder.ReporterRole);
+
+        if (!isAnalyst && !isReporter)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "Доступ заборонено для цієї ролі.");
+        }
+
+        var ownerFilter = isAnalyst ? null : (Guid?)userId;
+
+        var summary = await queries.GetSeveritySummaryAsync(ownerFilter, cancellationToken);
         return Results.Ok(summary);
     }
 }

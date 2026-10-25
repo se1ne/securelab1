@@ -108,10 +108,17 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
         return await GetDetailsAsync(id, requestingUserId, isPrivilegedReader: false, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(CancellationToken cancellationToken = default)
+   public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(
+        Guid? ownerUserId,
+        CancellationToken cancellationToken = default)
     {
-        var rawSummary = await dbContext.Incidents
-            .AsNoTracking()
+        var query = dbContext.Incidents.AsNoTracking();
+        if (ownerUserId is not null)
+        {
+            query = query.Where(incident => incident.OwnerUserId == ownerUserId);
+        }
+
+        var rawSummary = await query
             .GroupBy(i => i.Severity)
             .Select(g => new {
                 Severity = g.Key,

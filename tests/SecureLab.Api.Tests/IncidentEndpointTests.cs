@@ -348,6 +348,51 @@ public async Task A01_AnonymousTriage_Returns401()
     }
 
     [Fact]
+    public async Task A05_ReporterSearch_ReturnsOnlyOwnIncidents()
+    {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        using var response = await alice.GetAsync("/api/incidents/search?q=&sortBy=createdAtUtc");
+        var json = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(json);
+
+        foreach (var item in document.RootElement.EnumerateArray())
+        {
+            var id = item.GetProperty("id").GetGuid();
+            Assert.NotEqual(DbSeeder.BobIncidentId, id);
+        }
+    }
+
+    [Fact]
+    public async Task A01_AnonymousSearch_Returns401()
+    {
+        using var response = await _client.GetAsync("/api/incidents/search?q=test");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A05_ReporterSeveritySummary_CountsOnlyOwnIncidents()
+    {
+        using var alice = await factory.LoginAsync("alice", StudyPassword);
+
+        var summary = await alice.GetFromJsonAsync<List<IncidentSeveritySummaryResponse>>(
+            "/api/incidents/severity-summary");
+
+        Assert.NotNull(summary);
+        var total = summary!.Sum(item => item.Count);
+        Assert.True(total < 5, "Reporter має бачити лише власні інциденти, а не всі seed-записи.");
+    }
+
+    [Fact]
+    public async Task A01_AnonymousSeveritySummary_Returns401()
+    {
+        using var response = await _client.GetAsync("/api/incidents/severity-summary");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task ClientScript_DoesNotUseDangerousInnerHtmlSink()
     {
         var script = await _client.GetStringAsync("/app.js");
@@ -359,7 +404,9 @@ public async Task A01_AnonymousTriage_Returns401()
     [Fact]
     public async Task GetSeveritySummary_ReturnsExpectedDataAndCoversAllEnumValues()
     {
-        var response = await _client.GetAsync("/api/incidents/severity-summary");
+        using var morgan = await factory.LoginAsync("morgan", StudyPassword);
+
+        var response = await morgan.GetAsync("/api/incidents/severity-summary");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 

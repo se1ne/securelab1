@@ -128,7 +128,7 @@ public sealed class Lab02RegressionTests(SecureLabApiFactory factory)
     [Fact]
     public async Task S02_ControlInput_DoesNotExpandResultSet()
     {
-        using var client = factory.CreateClient();
+        using var client = await CreateAuthenticatedClientAsync();
 
         var controlInput = "zz-no-match' OR TRUE -- ";
         var encodedInput = Uri.EscapeDataString(controlInput);

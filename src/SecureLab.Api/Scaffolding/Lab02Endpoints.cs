@@ -16,13 +16,41 @@ public static class Lab02Endpoints
 
     public static void MapLab02Endpoints(this WebApplication app)
     {
-        app.MapGet("/api/incidents/search", async (string? q, string? sortBy, SecureLabDbContext db, CancellationToken ct) =>
+                app.MapGet("/api/incidents/search", async (
+            string? q,
+            string? sortBy,
+            HttpContext httpContext,
+            SecureLabDbContext db,
+            CancellationToken ct) =>
         {
+            var userIdValue = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!Guid.TryParse(userIdValue, out var userId))
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Authenticated user identifier is invalid.");
+            }
+
+            var isAnalyst = httpContext.User.IsInRole(DbSeeder.AnalystRole);
+            var isReporter = httpContext.User.IsInRole(DbSeeder.ReporterRole);
+
+            if (!isAnalyst && !isReporter)
+            {
+                return Results.Problem(
+                    statusCode: StatusCodes.Status403Forbidden,
+                    title: "Доступ заборонено для цієї ролі.");
+            }
+
             var pattern = "%" + EscapeLike(q ?? "") + "%";
 
             var found = db.Incidents.AsNoTracking()
                 .Where(item => EF.Functions.ILike(item.Title, pattern, "\\")
                             || EF.Functions.ILike(item.Description, pattern, "\\"));
+
+            if (!isAnalyst)
+            {
+                found = found.Where(item => item.OwnerUserId == userId);
+            }
 
             IQueryable<Incident>? ordered = sortBy switch
             {
@@ -57,7 +85,9 @@ public static class Lab02Endpoints
                 .ToListAsync(ct);
 
             return Results.Ok(items);
-        });
+        })
+        .RequireAuthorization();
+        
         app.MapPost("/api/incidents", async (
             CreateIncidentRequest request,
             HttpContext httpContext,
