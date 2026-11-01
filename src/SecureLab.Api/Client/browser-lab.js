@@ -1,18 +1,25 @@
 let current;
 const id = () => encodeURIComponent(document.querySelector("#incident-id").value.trim());
 const status = document.querySelector("#status");
+function createTextElement(tagName, text) {
+  const element = document.createElement(tagName);
+  element.textContent = text;
+  return element;
+}
+
 async function load() {
   const response = await fetch(`/api/incidents/${id()}`);
   status.textContent = `GET: ${response.status}`;
   if (!response.ok) return;
   current = await response.json();
   document.querySelector("#title").textContent = current.title;
-  document.querySelector("#description").innerHTML = current.description;
+  // Sink 1: Incident.Description
+  document.querySelector("#description").replaceChildren(
+    document.createTextNode(current.description));
   document.querySelector("#comments").replaceChildren();
   for (const comment of current.comments ?? []) {
-    const paragraph = document.createElement("p");
-    paragraph.innerHTML = comment.text;
-    document.querySelector("#comments").append(paragraph);
+    // Sink 2: IncidentComment.Text
+    document.querySelector("#comments").append(createTextElement("p", comment.text));
   }
   document.querySelector("#edit").elements.description.value = current.description;
 }
