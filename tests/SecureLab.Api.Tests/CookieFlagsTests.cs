@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace SecureLab.Api.Tests;
 
+[Collection("Serialized")]
 public sealed class CookieFlagsTests(SecureLabApiFactory factory)
     : IClassFixture<SecureLabApiFactory>
 {

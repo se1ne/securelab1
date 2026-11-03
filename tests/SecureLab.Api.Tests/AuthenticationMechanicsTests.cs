@@ -9,7 +9,7 @@ using System.Diagnostics;
 using System.Reflection;
 
 namespace SecureLab.Api.Tests;
-
+[Collection("Serialized")]
 public sealed class AuthenticationMechanicsTests(SecureLabApiFactory factory)
     : IClassFixture<SecureLabApiFactory>
 {
