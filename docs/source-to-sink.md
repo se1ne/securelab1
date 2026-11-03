@@ -35,7 +35,7 @@
 
 | Перевірка | Файл/команда | Vulnerable `84697d8` | Fixed | Доказ |
 |---|---|---|---|---|
-| Опис як текстовий вузол | `tests/browser/description-dom.js` (Console, `/browser-lab.html`) | FAIL: `Text changed` | PASS | рис. 82, 84 (FAIL); PASS — `<РИС_PASS_DESCRIPTION>` |
+| Опис як текстовий вузол | `tests/browser/description-dom.js` (Console, `/browser-lab.html`) | FAIL: `Text changed` | PASS | рис. 82, 84 (FAIL); PASS — рис. 82 |
 | Коментарі, повторний render без дублювання | `tests/browser/comments-dom.js` | FAIL: `Comment 1: text changed` | PASS: `every comment rendered as plain text, no duplicates after re-render` | рис. 87–88 |
 | Позитивні рядки | форма `/browser-lab.html` | — | `5 < 7`, `9 > 3`, лапки, апостроф, `&`, кирилиця, 日本語, емодзі відображено без пошкоджень; 3900 символів без помилок | рис. 26, 90, 91 |
 | URL-контекст | `resources/copyable/safe-url.js` (нейтральний приклад) | — | `javascript:` та некоректні значення → `null`; `/incidents/1` → `http://localhost:5080/incidents/1`; `onclick` відсутній | рис. 92 |

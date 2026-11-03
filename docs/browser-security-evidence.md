@@ -140,7 +140,7 @@ curl.exe -sS -D - -o NUL -H "Origin: http://localhost:4174" "http://localhost:50
 
 **DOM-тест.** `tests/browser/description-dom.js` і `tests/browser/comments-dom.js` (запускаються в Console справжнього браузера Firefox 159.0 на `/browser-lab.html`, спершу `allow pasting`).
 - Vulnerable `84697d8`: `description-dom.js` — FAIL `Text changed` (рис. 82, 84); `comments-dom.js` — FAIL `Comment 1: text changed` (рис. 88).
-- Fixed: `comments-dom.js` — PASS (рис. 87); `description-dom.js` — PASS (`<РИС_PASS_DESCRIPTION>`). Тести падають на небезпечному sink незалежно від CSP.
+- Fixed: `comments-dom.js` — PASS (рис. 87); `description-dom.js` — PASS (рис. 82). Тести падають на небезпечному sink незалежно від CSP.
 
 **Comments, повторний render і позитивні рядки.** `comments-dom.js` двічі викликає `load()` і перевіряє, що кількість дочірніх елементів збігається з `comments.length` (без дублювання), текст кожного `comments[i].text` збігається з `textContent` і `childElementCount === 0`. Позитивні рядки: рис. 26, 90, 91.
 
