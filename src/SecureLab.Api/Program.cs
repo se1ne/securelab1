@@ -48,6 +48,19 @@ builder.Services.AddDbContext<SecureLabDbContext>(options =>
     options.UseNpgsql(connectionString));
 builder.Services.AddScoped<IncidentQueries>();
 
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("Lab05BrowserProbe", policy =>
+        {
+            policy.WithOrigins("http://localhost:4173")
+                  .WithMethods("GET")
+                  .WithHeaders("X-Lab-Cors-Probe");
+        });
+    });
+}
+
 builder.AddLab03Identity();
 
 var app = builder.Build();
@@ -74,6 +87,12 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
+}
+
+app.UseRouting();
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors("Lab05BrowserProbe");
 }
 
 app.UseAuthentication();
