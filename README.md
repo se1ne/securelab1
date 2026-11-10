@@ -136,3 +136,10 @@ docs/                    карта архітектури, варіант, ма
 
 Перед commit перегляньте `git status`, `git diff --staged` і переконайтеся, що
 до Git не потрапили `.env`, cookies, tokens, реальні passwords, dumps або logs.
+
+## 8. Локальний запуск і перевірка
+
+- Пароль seed-акаунтів не зберігається в Git. Перед запуском і тестами задайте його у змінній середовища: `SeedUsers__Password`.
+- Для локального запуску в Production-like режимі по http задайте `Security__EnforceHttps=false`, інакше сервер перенаправляє http на https.
+- Тести: `dotnet test` (очікується 85 з 85).
+- Скидання даних: `$env:Database__AllowReset="true"; dotnet run --project src/SecureLab.Api -- --reset-database`.

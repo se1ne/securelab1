@@ -5,18 +5,30 @@ using SecureLab.Api.Presentation.Contracts;
 
 namespace SecureLab.Api.Application.Incidents;
 
+    public enum TriageResult
+    {
+        Success,
+        NotFound,
+        InvalidTransition
+    }
 public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<IncidentQueries> logger)
 {
     public async Task<IReadOnlyList<IncidentListItemResponse>> GetListAsync(
         IncidentStatus? status,
+        Guid? ownerUserId,
         CancellationToken cancellationToken)
     {
-        logger.LogInformation("Loading incidents with status filter {Status}", status);
+        logger.LogInformation(
+            "Loading incidents with status filter {Status} for owner {OwnerUserId}", status, ownerUserId);
 
         var query = dbContext.Incidents.AsNoTracking();
         if (status is not null)
         {
             query = query.Where(incident => incident.Status == status);
+        }
+        if (ownerUserId is not null)
+        {
+            query = query.Where(incident => incident.OwnerUserId == ownerUserId);
         }
 
         return await query
@@ -31,14 +43,21 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .ToListAsync(cancellationToken);
     }
 
-    public Task<IncidentDetailsResponse?> GetDetailsAsync(Guid id, CancellationToken cancellationToken)
+    public Task<IncidentDetailsResponse?> GetDetailsAsync(
+        Guid id,
+        Guid requestingUserId,
+        bool isPrivilegedReader,
+        CancellationToken cancellationToken)
     {
         var traceId = System.Diagnostics.Activity.Current?.TraceId.ToString() ?? "N/A";
-        logger.LogInformation("Loading incident {IncidentId}, TraceId: {TraceId}", id, traceId);
+        logger.LogInformation(
+            "Loading incident {IncidentId} for user {UserId}, TraceId: {TraceId}",
+            id, requestingUserId, traceId);
 
         return dbContext.Incidents
             .AsNoTracking()
-            .Where(incident => incident.Id == id)
+            .Where(incident => incident.Id == id
+                && (isPrivilegedReader || incident.OwnerUserId == requestingUserId))
             .Select(incident => new IncidentDetailsResponse(
                 incident.Id,
                 incident.Title,
@@ -60,10 +79,46 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(CancellationToken cancellationToken = default)
+    public async Task<IncidentDetailsResponse?> UpdateContentAsync(
+        Guid id,
+        Guid requestingUserId,
+        string title,
+        string description,
+        IncidentSeverity severity,
+        DateTimeOffset occurredAtUtc,
+        CancellationToken cancellationToken)
     {
-        var rawSummary = await dbContext.Incidents
-            .AsNoTracking()
+        var incident = await dbContext.Incidents
+            .Where(item => item.Id == id && item.OwnerUserId == requestingUserId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (incident is null)
+        {
+            return null;
+        }
+
+        incident.Title = title;
+        incident.Description = description;
+        incident.Severity = severity;
+        incident.OccurredAtUtc = occurredAtUtc;
+        incident.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return await GetDetailsAsync(id, requestingUserId, isPrivilegedReader: false, cancellationToken);
+    }
+
+   public async Task<IReadOnlyList<IncidentSeveritySummaryResponse>> GetSeveritySummaryAsync(
+        Guid? ownerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var query = dbContext.Incidents.AsNoTracking();
+        if (ownerUserId is not null)
+        {
+            query = query.Where(incident => incident.OwnerUserId == ownerUserId);
+        }
+
+        var rawSummary = await query
             .GroupBy(i => i.Severity)
             .Select(g => new {
                 Severity = g.Key,
@@ -92,5 +147,68 @@ public sealed class IncidentQueries(SecureLabDbContext dbContext, ILogger<Incide
 
         return result;
     }
+
+    public async Task<bool> DeleteAsync(
+        Guid id,
+        Guid requestingUserId,
+        CancellationToken cancellationToken)
+    {
+        var incident = await dbContext.Incidents
+            .Where(item => item.Id == id && item.OwnerUserId == requestingUserId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (incident is null)
+        {
+            return false;
+        }
+
+        dbContext.Incidents.Remove(incident);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return true;
+    }
+
+    public async Task<TriageResult> TriageAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var incident = await dbContext.Incidents
+            .Where(item => item.Id == id)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (incident is null)
+        {
+            return TriageResult.NotFound;
+        }
+
+        if (incident.Status != IncidentStatus.New)
+        {
+            return TriageResult.InvalidTransition;
+        }
+
+        incident.Status = IncidentStatus.Triaged;
+        incident.UpdatedAtUtc = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return TriageResult.Success;
+    }
+
+    public async Task<IncidentCommentDetailsResponse?> GetCommentAsync(
+    Guid commentId,
+    CancellationToken cancellationToken)
+{
+    return await dbContext.IncidentComments
+        .AsNoTracking()
+        .Where(comment => comment.Id == commentId)
+        .Select(comment => new IncidentCommentDetailsResponse(
+            comment.Id,
+            comment.IncidentId,
+            comment.Author.DisplayName,
+            comment.Text,
+            comment.IsInternal,
+            comment.CreatedAtUtc))
+        .SingleOrDefaultAsync(cancellationToken);
+}
 
 }

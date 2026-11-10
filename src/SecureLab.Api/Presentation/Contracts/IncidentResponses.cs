@@ -28,3 +28,25 @@ public sealed record IncidentCommentResponse(
 public sealed record IncidentSeveritySummaryResponse(
     string Severity,
     int Count);
+
+public sealed record CreatedIncidentResponse(
+    Guid Id,
+    string Title,
+    string Severity,
+    string Status,
+    DateTimeOffset OccurredAtUtc,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record UpdateIncidentRequest(
+    string? Title,
+    string? Description,
+    string? Severity,
+    DateTimeOffset? OccurredAtUtc);
+
+public sealed record IncidentCommentDetailsResponse(
+    Guid Id,
+    Guid IncidentId,
+    string AuthorDisplayName,
+    string Text,
+    bool IsInternal,
+    DateTimeOffset CreatedAtUtc);

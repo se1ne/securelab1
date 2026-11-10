@@ -24,4 +24,5 @@ appsettings.Local.json
 *.dump
 *.sql.gz
 *.log
+*.bundle
 
