@@ -15,12 +15,11 @@ const logoutResult =
 
 
 async function apiFetch(path, options = {}) {
-    return fetch(path, {
-        ...options,
-        credentials: "same-origin"
-    });
+    const isMutation = options.method && options.method !== "GET";
+    const isAnonymousAuth = path === "/api/auth/login" || path === "/api/auth/register";
+    const send = isMutation && !isAnonymousAuth ? window.csrf.fetch : fetch;
+    return send(path, { ...options, credentials: "same-origin" });
 }
-
 
 async function refreshProfile() {
     const response =
@@ -124,6 +123,7 @@ document
             `Login: ${response.status}`;
 
         if (response.status === 204) {
+            window.csrf.clear();
             await refreshProfile();
         }
     });

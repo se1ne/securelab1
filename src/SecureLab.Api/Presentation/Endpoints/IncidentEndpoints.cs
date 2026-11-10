@@ -3,6 +3,7 @@ using SecureLab.Api.Data;
 using SecureLab.Api.Application.Incidents;
 using SecureLab.Api.Data.Entities;
 using SecureLab.Api.Presentation.Contracts;
+using SecureLab.Api.Security;
 
 
 namespace SecureLab.Api.Presentation.Endpoints;
@@ -13,6 +14,7 @@ public static class IncidentEndpoints
     {
              
         endpoints.MapGet("/api/incident-comments/{id:guid}", GetCommentAsync)
+            .AddEndpointFilter<AuthorizationDenialFilter>()
             .RequireAuthorization()
             .WithName("GetIncidentComment")
             .Produces<IncidentCommentDetailsResponse>()
@@ -20,6 +22,7 @@ public static class IncidentEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
         
         var group = endpoints.MapGroup("/api/incidents")
+            .AddEndpointFilter<AuthorizationDenialFilter>()
             .WithTags("Incidents");
 
         group.MapGet("/", GetListAsync)
@@ -47,12 +50,14 @@ public static class IncidentEndpoints
             .WithName("UpdateIncidentContent")
             .Produces<IncidentDetailsResponse>()
             .ProducesValidationProblem()
+            .AddEndpointFilter<AntiforgeryValidationFilter>()
             .ProducesProblem(StatusCodes.Status404NotFound);
         
         group.MapDelete("/{id:guid}", DeleteAsync)
             .RequireAuthorization()
             .WithName("DeleteIncident")
             .Produces(StatusCodes.Status204NoContent)
+            .AddEndpointFilter<AntiforgeryValidationFilter>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapPost("/{id:guid}/triage", TriageAsync)
@@ -61,6 +66,8 @@ public static class IncidentEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status404NotFound)
+            .AddEndpointFilter<AntiforgeryValidationFilter>()
+            .AddEndpointFilter<PrivilegedActionAuditFilter>()
             .ProducesProblem(StatusCodes.Status409Conflict);
 
         return endpoints;

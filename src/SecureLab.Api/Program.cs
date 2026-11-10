@@ -6,6 +6,7 @@ using SecureLab.Api.Data;
 using SecureLab.Api.Presentation.Endpoints;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
+using SecureLab.Api.Security;
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -38,6 +39,7 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             });
     });
+    options.AddSearchPolicy();
 });
 
 var connectionString = builder.Configuration.GetConnectionString("SecureLab")
@@ -47,6 +49,10 @@ var connectionString = builder.Configuration.GetConnectionString("SecureLab")
 builder.Services.AddDbContext<SecureLabDbContext>(options =>
     options.UseNpgsql(connectionString));
 builder.Services.AddScoped<IncidentQueries>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<AuthorizationDenialTracker>();
+builder.Services.AddHsts(options => options.MaxAge = TimeSpan.FromDays(365));
+builder.Services.AddHttpsRedirection(options => options.HttpsPort = 443);
 
 if (builder.Environment.IsDevelopment())
 {
@@ -64,6 +70,16 @@ if (builder.Environment.IsDevelopment())
 
 builder.AddLab03Identity();
 
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = SecureLab.Api.Security.AntiforgeryContract.HeaderName;
+    options.Cookie.Name = "SecureLab.Antiforgery";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+        ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
+});
+
 var app = builder.Build();
 
 var resetRequested = args.Contains("--reset-database", StringComparer.Ordinal);
@@ -76,6 +92,12 @@ if (resetRequested)
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+var enforceHttps = app.Configuration.GetValue("Security:EnforceHttps", !app.Environment.IsDevelopment());
+if (enforceHttps)
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
 
 var csp = "default-src 'self'; frame-ancestors 'none'";
 
@@ -127,6 +149,7 @@ app.MapGet("/health", async (SecureLabDbContext dbContext, CancellationToken can
     .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
 app.MapIncidentEndpoints();
+app.MapCsrfToken();
 app.MapLab03Identity();
 app.MapLab02Endpoints();
 app.MapFallback("/api/{**catchAll}", () => Results.Problem(

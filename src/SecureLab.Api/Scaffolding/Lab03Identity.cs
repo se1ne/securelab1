@@ -5,6 +5,7 @@ using System.Net.Mail;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using Microsoft.AspNetCore.RateLimiting;
+using SecureLab.Api.Security;
 
 namespace SecureLab.Api.Scaffolding;
 
@@ -145,9 +146,9 @@ public static class Lab03Identity
                 || string.IsNullOrEmpty(input.Password))
             {
                 logger.LogInformation(
-                    "Authentication event {EventType}: user {UserName}, result {Result}, trace {TraceId}",
+                    "Authentication event {EventType}: userRef {UserRef}, result {Result}, trace {TraceId}",
                     "login",
-                    input.UserName ?? "(missing)",
+                    LogSanitizer.Fingerprint(input.UserName),
                     "failure",
                     context.TraceIdentifier);
 
@@ -160,12 +161,18 @@ public static class Lab03Identity
                 isPersistent: false,
                 lockoutOnFailure: false);
 
-            logger.LogInformation(
-                "Authentication event {EventType}: user {UserName}, result {Result}, trace {TraceId}",
-                "login",
-                input.UserName,
-                result.Succeeded ? "success" : "failure",
-                context.TraceIdentifier);
+            if (result.Succeeded)
+            {
+                logger.LogInformation(
+                    "Authentication event {EventType}: user {UserName}, result {Result}, trace {TraceId}",
+                    "login", input.UserName, "success", context.TraceIdentifier);
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Authentication event {EventType}: userRef {UserRef}, result {Result}, trace {TraceId}",
+                    "login", LogSanitizer.Fingerprint(input.UserName), "failure", context.TraceIdentifier);
+            }
 
             return result.Succeeded
                 ? Results.NoContent()
@@ -179,6 +186,7 @@ public static class Lab03Identity
 
             return Results.NoContent();
         })
+        .AddEndpointFilter<AntiforgeryValidationFilter>()
         .RequireAuthorization();
         // Навмисно хибна навчальна довіра: ЛР 03 замінює заявлений id на verified principal.
         app.MapGet("/api/me", async (

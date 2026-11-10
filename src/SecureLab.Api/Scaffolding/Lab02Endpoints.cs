@@ -3,6 +3,8 @@ using SecureLab.Api.Data;
 using SecureLab.Api.Data.Entities;
 using SecureLab.Api.Presentation.Contracts;
 using System.Security.Claims;
+using SecureLab.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace SecureLab.Api.Scaffolding;
 
@@ -86,7 +88,9 @@ public static class Lab02Endpoints
 
             return Results.Ok(items);
         })
-        .RequireAuthorization();
+        .AddEndpointFilter<AuthorizationDenialFilter>()
+        .RequireAuthorization()
+        .RequireRateLimiting("search");
         
         app.MapPost("/api/incidents", async (
             CreateIncidentRequest request,
@@ -187,6 +191,8 @@ public static class Lab02Endpoints
                 incident.Status.ToString(), incident.OccurredAtUtc, incident.CreatedAtUtc);
             return Results.Created($"/api/incidents/{incident.Id}", response);
 })
+.AddEndpointFilter<AuthorizationDenialFilter>()
+.AddEndpointFilter<AntiforgeryValidationFilter>()
 .RequireAuthorization();
     }
 }
